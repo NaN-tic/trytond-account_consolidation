@@ -27,12 +27,14 @@ class ConsolidationWizard(Wizard):
         Line = pool.get('account.move.line')
         Account = pool.get('account.account')
         AccountTemplate = pool.get('account.account.template')
+        Period = pool.get('account.period')
 
         cursor = Transaction().cursor
 
         destination = Move.__table__()
         move = Move.__table__()
         line = Line.__table__()
+        period = Period.__table__()
         account = Account.__table__()
         template = AccountTemplate.__table__()
 
@@ -48,10 +50,15 @@ class ConsolidationWizard(Wizard):
         query = move.delete(where=move.company == company)
         cursor.execute(*query)
 
-        query = move.select(company, move.create_date, move.create_uid,
+        query = move.join(period,
+            condition=((move.date >= period.start_date)
+                & (move.date <= period.end_date)
+                & (period.type == 'standard')
+                ))
+        query = query.select(company, move.create_date, move.create_uid,
             move.write_date, move.write_uid, move.id, move.number, move.date,
             move.post_number, move.post_date, move.state, move.journal,
-            move.description, move.period, where=(move.company != company))
+            move.description, period.id, where=(move.company != company))
         destination = destination.insert([
                 destination.company, destination.create_date,
                 destination.create_uid, destination.write_date,
@@ -74,9 +81,9 @@ class ConsolidationWizard(Wizard):
             condition=((account2.template == template.id)
                 & (account2.company == company)))
         query = query.join(line,
-                condition=(account.id == line.account))
+            condition=(account.id == line.account))
         query = query.join(move,
-                    condition=(Cast(line.move, Move.origin.sql_type().base) ==
+            condition=(Cast(line.move, Move.origin.sql_type().base) ==
                 move.origin))
         query = query.select(move.id, line.debit, line.credit, line.party,
             line.description, line.maturity_date, account2.id, line.state,
